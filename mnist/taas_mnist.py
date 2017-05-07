@@ -8,6 +8,7 @@ import tensorflow as tf
 from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
 
 from caicloud.clever.tensorflow import dist_base
+from caicloud.clever.tensorflow import model_exporter
 
 tf.app.flags.DEFINE_string("data_dir",
                            "/tmp/mnist-data",
@@ -47,8 +48,21 @@ def model_fn(sync, num_replicas):
     optimizer = tf.train.AdagradOptimizer(0.01);
     _train_op = optimizer.minimize(_loss, global_step=_global_step)
 
+    correct_prediction = tf.equal(tf.argmax(logits, 1),
+                                  tf.argmax(_labels, 1))
+    _accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    def accuracy_evalute_fn(session):
+        return session.run(_accuracy,
+                           feed_dict={
+                               _input_images: _mnist.validation.images,
+                               _labels: _mnist.validation.labels})
+    model_metric_ops = {
+        "accuracy": accuracy_evalute_fn
+    }
+
     return dist_base.ModelFnHandler(
-        global_step=_global_step)
+        global_step = _global_step,
+        model_metric_ops = model_metric_ops)
 
 _local_step = 0
 def train_fn(session, num_global_step):
