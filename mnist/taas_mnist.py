@@ -12,6 +12,9 @@ from caicloud.clever.tensorflow import dist_base
 tf.app.flags.DEFINE_string("data_dir",
                            "/tmp/mnist-data",
                            "path to mnist dataset.")
+tf.app.flags.DEFINE_string("checkpoint_dir",
+                           None,
+                           "path to pre-trained model checkpoint.")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -65,7 +68,37 @@ def train_fn(session, num_global_step):
         print('Step {0}: loss = {1:0.2f} ({2:0.3f} sec), global step: {3}.'.format(
             _local_step, loss_value, duration, np_global_step))
 
+def gen_init_fn():
+    checkpoint_path = FLAGS.checkpoint_dir
+    if checkpoint_path is None or checkpoint_path == "":
+        return None
+    
+    if not tf.gfile.Exists(checkpoint_path):
+        print('WARNING: checkpoint path {0} not exists.'.format(checkpoint_path))
+        return None
+    
+    if tf.gfile.IsDirectory(checkpoint_path):
+        checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
+    else:
+        checkpoint_path = checkpoint_path
+
+    # 定义 tf.train.Saver 会修改 TensorFlow 的 Graph 结构，
+    # 而当 Base 框架调用自定义初始化函数 init_from_checkpoint 的时候，
+    # TensorFlow 模型的 Graph 结构已经变成 finalized，不再允许修改 Graph 结构。
+    # 所以，这个定义必须放在  init_from_checkpoint 函数外面。
+    saver = tf.train.Saver(tf.trainable_variables())
+
+    # 返回执行自定义初始化的函数。
+    # 该函数必须接收两个参数：
+    #   - scafford: tf.train.Scaffold 对象；
+    #   - sess: tf.Session 对象。
+    def init_from_checkpoint(scaffold, sess):
+        print('warm-start from checkpoint {0}'.format(checkpoint_path))
+        saver.restore(sess, checkpoint_path)
+    return init_from_checkpoint
+
 if __name__ == '__main__':
     distTfRunner = dist_base.DistTensorflowRunner(
-        model_fn = model_fn)
+        model_fn = model_fn,
+        gen_init_fn = gen_init_fn)
     distTfRunner.run(train_fn)
