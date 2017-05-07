@@ -16,6 +16,9 @@ tf.app.flags.DEFINE_string("data_dir",
 tf.app.flags.DEFINE_string("checkpoint_dir",
                            None,
                            "path to pre-trained model checkpoint.")
+tf.app.flags.DEFINE_string("export_dir",
+                           "None",
+                           "export model to that directory.")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -60,9 +63,15 @@ def model_fn(sync, num_replicas):
         "accuracy": accuracy_evalute_fn
     }
 
+    model_export_spec = model_exporter.ModelExportSpec(
+        export_dir=FLAGS.export_dir,
+        input_tensors={"image": _input_images},
+        output_tensors={"logits": logits})
+
     return dist_base.ModelFnHandler(
         global_step = _global_step,
-        model_metric_ops = model_metric_ops)
+        model_metric_ops = model_metric_ops,
+        model_export_spec = model_export_spec)
 
 _local_step = 0
 def train_fn(session, num_global_step):
