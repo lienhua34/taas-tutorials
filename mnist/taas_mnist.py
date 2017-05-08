@@ -42,10 +42,18 @@ def model_fn(sync, num_replicas):
         tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=_labels),
         name='loss')
     optimizer = tf.train.AdagradOptimizer(0.01);
+    if sync:
+        num_workers = num_replicas
+        optimizer = tf.train.SyncReplicasOptimizer(
+            optimizer,
+            replicas_to_aggregate=num_replicas,
+            total_num_replicas=num_replicas,
+            name="mnist_sync_replicas")
     _train_op = optimizer.minimize(_loss, global_step=_global_step)
 
     return dist_base.ModelFnHandler(
-        global_step=_global_step)
+        global_step = _global_step,
+        optimizer = optimizer)
 
 _local_step = 0
 def train_fn(session, num_global_step):
